@@ -1,4 +1,5 @@
 import cv2
+from cv2 import VideoCapture, CAP_DSHOW
 import numpy as np
 import SeguimientoManos as sm  
 import pygame as pg
@@ -7,6 +8,8 @@ from os import remove
 from keyboard import is_pressed
 import objetos as obj
 from time import sleep
+from threading import Thread
+
 
 def ActuCentro(cartas):
     global sprites
@@ -69,6 +72,13 @@ def cv2pg(img):
     img = cv2.flip(img,0)
     return pg.surfarray.make_surface(img)
 
+def IA():
+    cartas,centro = mesa.IA()
+    if centro: ActuCentro(cartas)
+    else: sprites.add(cartas)
+    
+
+
 w,h = 800,500
 
 pg.init()
@@ -78,7 +88,7 @@ pg.display.set_caption("UNO")
 
 fuente = pg.font.Font(None,50)
 
-cap = cv2.VideoCapture(0)
+cap = VideoCapture(0,CAP_DSHOW)
 
 cuadro = 100
 sua = 5
@@ -87,8 +97,8 @@ cubix, cubiy = 0,0
 
 sprites = pg.sprite.Group()
 
-mesa = None
-mazo = None
+mesa:obj.Mesa = None
+mazo:obj.Mazo = None
 rellenar()
 
 detector = sm.detectormanos(maxManos=1) 
@@ -97,6 +107,8 @@ mover = True
 turno = mesa.turno
 turno.Tiene(mesa.centro)
 ganador = 'nadie'
+texto = ""
+color = (155,155,155)
 
 print("ya va empezar")
 while True:
@@ -112,19 +124,27 @@ while True:
     lista, bbox = detector.encontrarposicion(frame) 
 
     if not mover:
-        cartas,centro = mesa.IA()
-        if centro: ActuCentro(cartas)
-        else: sprites.add(cartas)
+        t = Thread(target=IA)
+        t.start() 
+        """ cartas,centro = mesa.IA()
+        if centro: 
+            ActuCentro(cartas)
+        else: 
+            sprites.add(cartas) """
         Cambio(True)
-        continue
-    if len(lista) != 0:
+    
+    
+    agarrar = ""
+    if mesa.turno_text=="Tu turno" and len(lista) != 0:
         x1, y1 = lista[8][1:]                  
         x2, y2 = lista[12][1:]   
 
         dedos = detector.dedosarriba() 
         cv2.rectangle(frame, (0,0), (w, h), (0, 0, 0), 2)  
 
-        if dedos[1]== 1 and dedos[2] == 0:
+        mesa.J1.Tiene(mesa.centro)
+
+        if dedos[1]== 1 and dedos[2] == 0 and mover:
             if click:
                 obj.deseleccion()
                 cartas = mesa.deseleccionar()
@@ -147,22 +167,24 @@ while True:
             cv2.circle(frame, (x1,y1), 10, (0,0,0), cv2.FILLED)
             pubix, pubiy = cubix, cubiy
 
-        if dedos[1] == 1 and dedos[2] == 1:
+        print(type(turno))
+        if not mesa.J1.agarrar: agarrar = "Necesitas mas cartas"
+
+        if  dedos[1] == 1 and dedos[2] == 1:
             longitud, frame, linea = detector.distancia(8,12,frame) 
             #print(longitud)
             if longitud < 50:
                 click=True
-                if not turno.agarrar:
+                if not mesa.J1.agarrar:
 
                     if x1>=mazo.rect.left and x1<=mazo.rect.right and y1>=mazo.rect.top and y1<=mazo.rect.bottom: 
-                        print("agarro")
+                        print("Humano agarro")
                         carta = mazo.Agarrar()
                         carta = mesa.J1.Agregar(carta)
                         sprites.add(carta)
                         mesa.J1.Ordenar()
                         mesa.CambiarTurno()
                         Cambio(False)
-                        continue
 
                 sprites.update(x1,y1,click,(linea[4],linea[5]))
                 cv2.circle(frame, (linea[4],linea[5]), 10, (0,255,0), cv2.FILLED)
@@ -170,9 +192,16 @@ while True:
             
     fondo = cv2pg(frame)
     vtn.blit(fondo,(0,0))
-
+    turno_text = fuente.render(mesa.turno_text,1,mesa.tunro_color)
+    vtn.blit(turno_text,(w-turno_text.get_width()-50,h//2-turno_text.get_height()//2))
+    turno_text = fuente.render(agarrar,1,(0,200,100))
+    vtn.blit(turno_text,(w-turno_text.get_width()-50,h//2-turno_text.get_height()//2+50))
     sprites.draw(vtn)
     pg.display.update()
+
+    for event in pg.event.get():
+        if event.type is pg.QUIT:
+            exit()
 
     if is_pressed("q"):
         break
@@ -183,7 +212,7 @@ print(f"Ganador: {ganador}")
 sprites.remove(mesa.centro)
 sprites.draw(vtn)
 pg.display.update()
-texto = fuente.render("Ganador: "+ganador,1,(150,150,150))
+texto = fuente.render("Ganador: "+ganador,1,(255,0,0))
 vtn.blit(texto,(w//2-texto.get_width()//2,h//2-texto.get_height()//2))
 pg.display.update()
 sleep(2)

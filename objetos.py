@@ -1,9 +1,12 @@
-from pygame.sprite import Sprite 
+from pygame.sprite import Sprite
+from pygame import Surface,Rect
 from pygame.image import load
 from random import choice
 from time import sleep
 
 posesion = False
+
+MARGIN = 10
 
 def deseleccion():
     global posesion 
@@ -16,15 +19,22 @@ class Carta(Sprite):
 
     def __init__(self,c,n,x,y) -> None:
         super().__init__()
-        self.color = c
-        self.numero = n
-        self.x = x
-        self.y = y
-        self.image = load(f".\\img_cartas\\carta_{self.numero}{self.color}.gif")
-        self.rect = self.image.get_rect()
+        self.color:str = c
+        self.numero:int = n
+        self.x:int = x
+        self.y:int = y
+        self.image:Surface = load(f".\\img_cartas\\carta_{self.numero}{self.color}.gif")
+        self.rect:Rect = self.image.get_rect()
         self.rect.center = (self.x,self.y)
 
     def Mover(self,x,y):
+        x1 = self.x - x
+        y1 = self.y - y
+        x1/=100
+        y1/=100
+        for _ in range(100):
+            self.rect.x += x1
+            self.rect.y += y1
         self.rect.x = x
         self.rect.y = y
 
@@ -55,7 +65,7 @@ class CartaIntr(Carta):
 
     def update(self,x,y,click=False,punto=(0,0)) -> None:
         global posesion
-        if(x>=self.rect.left and x<=self.rect.right and y>=self.rect.top and y<=self.rect.bottom):
+        if(x>=self.rect.left and x<=self.rect.right and y>=self.rect.top-MARGIN and y<=self.rect.bottom+MARGIN):
             if (click and not posesion) or self.select:
                 posesion = True
                 self.select = True
@@ -69,7 +79,7 @@ class CartaIntr(Carta):
 
             
 class Mazo(Sprite):
-    cartas = []
+    cartas:list[Carta] = []
     permitir = False
 
     def __init__(self,x,y) -> None:
@@ -96,7 +106,7 @@ class Mazo(Sprite):
             seleccion.append(self.Agarrar())
         return seleccion
 
-    def Agarrar(self):
+    def Agarrar(self) -> Carta:
         carta = choice(self.cartas)
         self.cartas.remove(carta)
         return carta
@@ -104,7 +114,7 @@ class Mazo(Sprite):
 
 class Jugador():
     def __init__(self,mazo,x,y) -> None:
-        self.mazo = mazo
+        self.mazo:list[Carta] = mazo
         self.x = x
         self.y = y
         self.Ordenar()
@@ -120,9 +130,10 @@ class Jugador():
         self.mazo.append(carta)
         self.Ordenar()
 
-    def Tiene(self,centro):
+    def Tiene(self,centro:Carta):
         for carta in self.mazo:
             if carta.color == centro.color or carta.numero == centro.numero:
+                print(carta.color, carta.numero, centro.color, centro.numero)
                 self.agarrar = True
                 return
         
@@ -162,25 +173,29 @@ class Mesa():
         self.mazo.Llenar()
         self.J1 = Humano(self.mazo.Repartir(), w//2, h-100)
         self.J2 = Maquina(self.mazo.Repartir(), w//2, 50)
-        self.centro = self.mazo.Agarrar()
+        self.centro:Carta = self.mazo.Agarrar()
         self.centro.Colocar(w//2-25,h//2-35)
         self.turno = self.J1
+        self.turno_text = "Tu turno"
+        self.tunro_color = (0,255,0)
 
     def deseleccionar(self):
-        margen = 10
+        
         for carta in self.J1.mazo:
 
             if carta.select:
-                if carta.rect.x>=self.centro.rect.left+margen and carta.rect.x<=self.centro.rect.right-margen and carta.rect.y>=self.centro.rect.top-margen and carta.rect.y<=self.centro.rect.bottom+margen:
-                    res = self.CambiarCentro(carta,self.J1)
-                    if res!=None: return res
+                if carta.rect.x>=self.centro.rect.left-MARGIN and carta.rect.x<=self.centro.rect.right+MARGIN and carta.rect.y>=self.centro.rect.top-MARGIN and carta.rect.y<=self.centro.rect.bottom+MARGIN:
+                    if carta.color==self.centro.color or carta.numero==self.centro.numero: 
+                        res = self.CambiarCentro(carta,self.J1)
+                        if res!=None: return res
                 carta.Regresar()
             carta.select = False
 
-    def CambiarCentro(self,carta,jugador):
+    def CambiarCentro(self,carta:Carta,jugador:Jugador):
         if carta==None: return
 
         carta.Colocar(self.centro.x,self.centro.y)
+        print(carta.x,carta.y)
         ant = self.centro
         self.centro = carta.NoIntr() if type(carta) == CartaIntr else carta
         self.centro.Mostrar()
@@ -194,23 +209,30 @@ class Mesa():
     def CambiarTurno(self):
         if self.turno is self.J1:
             self.turno = self.J2
+            self.turno_text = "Turno de la maquina"
+            self.tunro_color = (255,0,0)
             print("Maquina")
         elif self.turno is self.J2:
             self.turno = self.J1
+            self.turno_text = "Tu turno"
+            self.tunro_color = (0,255,0)
             print("Humano")
         self.turno.Tiene(self.centro)
         
 
     def IA(self):
         seleccion = self.J2.IA(self.centro)
-
+        sleep(2)
         if seleccion==None: 
+            self.CambiarTurno()
+            print("IA agarro")
             seleccion = self.mazo.Agarrar()
             seleccion.Ocultar()
             self.J2.Agregar(seleccion)
             self.J2.Ordenar()
             return [seleccion,False]
 
+        print("IA puso una carta")
         return [self.CambiarCentro(seleccion,self.J2),True]
 
 
